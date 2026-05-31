@@ -33,7 +33,6 @@ const COLORS = [
 const SHAPES = [
   [[0, 0], [0, 1], [0, 2], [0, 3]],
   [[0, 0], [0, 1], [0, 2], [0, 3], [0, 4]],
-  [[0, 0], [1, 0], [2, 0], [3, 0], [4, 0], [5, 0]],
   [[0, 0], [1, 0], [2, 0], [2, 1]],
   [[0, 1], [1, 1], [2, 1], [2, 0], [2, 2]],
   [[0, 0], [0, 1], [0, 2], [1, 1]],
@@ -43,8 +42,7 @@ const SHAPES = [
   [[0, 1], [0, 2], [1, 0], [1, 1]],
   [[0, 0], [1, 0], [1, 1], [2, 1], [2, 2]],
   [[0, 0], [1, 0], [1, 1], [1, 2], [2, 2]],
-  [[0, 1], [1, 0], [1, 1], [2, 1], [2, 2]],
-  [[0, 0], [0, 1], [1, 1], [2, 1], [2, 2], [2, 3]]
+  [[0, 1], [1, 0], [1, 1], [2, 1], [2, 2]]
 ];
 
 const boardEl = document.getElementById("board");
@@ -116,10 +114,35 @@ function getBounds(cells) {
   };
 }
 
+function isOrthogonallyConnected(cells) {
+  if (cells.length < 4 || cells.length > 5) {
+    return false;
+  }
+
+  const keys = new Set(cells.map(([row, col]) => `${row}-${col}`));
+  const queue = [cells[0]];
+  const seen = new Set([`${cells[0][0]}-${cells[0][1]}`]);
+  const directions = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+
+  while (queue.length) {
+    const [row, col] = queue.shift();
+    directions.forEach(([rowStep, colStep]) => {
+      const key = `${row + rowStep}-${col + colStep}`;
+      if (keys.has(key) && !seen.has(key)) {
+        seen.add(key);
+        queue.push([row + rowStep, col + colStep]);
+      }
+    });
+  }
+
+  return seen.size === cells.length;
+}
+
 function generatePieces() {
   const colors = shuffle(COLORS);
+  const validShapes = SHAPES.filter(isOrthogonallyConnected);
   return Array.from({ length: 3 }, (_, index) => {
-    const cells = transformShape(SHAPES[randomInt(0, SHAPES.length - 1)]);
+    const cells = transformShape(validShapes[randomInt(0, validShapes.length - 1)]);
     return {
       id: globalThis.crypto && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`,
       cells,
@@ -364,19 +387,26 @@ function startDrag(event) {
   const rect = event.currentTarget.getBoundingClientRect();
   dragState = {
     index,
-    piece,
+    piece: clonePiece(piece),
     offsetX: event.clientX - rect.left,
     offsetY: event.clientY - rect.top,
     pointerId: event.pointerId,
     candidate: null
   };
   ghostEl.innerHTML = "";
-  ghostEl.appendChild(buildPieceElement(piece, "ghost"));
+  ghostEl.appendChild(buildPieceElement(dragState.piece, "ghost"));
   ghostEl.className = "drag-ghost visible";
   moveDrag(event);
   window.addEventListener("pointermove", moveDrag);
   window.addEventListener("pointerup", endDrag);
   window.addEventListener("pointercancel", cancelDrag);
+}
+
+function clonePiece(piece) {
+  return {
+    ...piece,
+    cells: piece.cells.map(([row, col]) => [row, col])
+  };
 }
 
 function moveDrag(event) {
