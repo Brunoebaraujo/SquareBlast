@@ -55,6 +55,7 @@ const PIECE_SIZE_WEIGHTS = [
   { size: 5, weight: 20 }
 ];
 const TOUCH_LISTENER_OPTIONS = { passive: false };
+const POINTER_LISTENER_OPTIONS = { passive: false };
 
 const boardEl = document.getElementById("board");
 const trayEl = document.getElementById("tray");
@@ -230,6 +231,10 @@ function canPlace(board, piece, startRow, startCol) {
   });
 }
 
+function isValidPlacement(piece, startRow, startCol) {
+  return canPlace(state.board, piece, startRow, startCol);
+}
+
 function canPlaceAnywhere(board, piece) {
   for (let row = 0; row < SIZE; row += 1) {
     for (let col = 0; col < SIZE; col += 1) {
@@ -382,8 +387,12 @@ function renderTray() {
     if (piece) {
       const pieceEl = buildPieceElement(piece, "piece");
       pieceEl.dataset.index = index;
-      pieceEl.addEventListener("pointerdown", startDrag);
-      pieceEl.addEventListener("touchstart", startDrag, TOUCH_LISTENER_OPTIONS);
+      if (window.PointerEvent) {
+        pieceEl.addEventListener("pointerdown", startDrag, POINTER_LISTENER_OPTIONS);
+      } else {
+        pieceEl.addEventListener("touchstart", startDrag, TOUCH_LISTENER_OPTIONS);
+        pieceEl.addEventListener("mousedown", startDrag);
+      }
       slot.appendChild(pieceEl);
     }
     trayEl.appendChild(slot);
@@ -400,6 +409,8 @@ function buildPieceElement(piece, className) {
     for (let col = 0; col < piece.cols; col += 1) {
       const cell = document.createElement("div");
       cell.className = className.includes("piece") ? "piece-cell" : "ghost-cell";
+      cell.dataset.row = row;
+      cell.dataset.col = col;
       if (occupied.has(`${row}-${col}`)) {
         cell.style.backgroundColor = piece.color;
       } else {
@@ -415,7 +426,7 @@ function startDrag(event) {
   if (state.gameOver || state.isClearing) {
     return;
   }
-  const point = getEventPoint(event);
+  const point = getClientPoint(event);
   if (!point) {
     return;
   }
@@ -439,10 +450,11 @@ function startDrag(event) {
   dragState = {
     index,
     piece: activeDraggedPiece,
-    inputType: event.type.startsWith("touch") ? "touch" : "pointer",
-    offsetX: point.clientX - rect.left,
-    offsetY: point.clientY - rect.top,
+    inputType: event.type.startsWith("touch") ? "touch" : event.type.startsWith("mouse") ? "mouse" : "pointer",
+    offsetX: point.x - rect.left,
+    offsetY: point.y - rect.top,
     pointerId: event.pointerId,
+    dragAnchor: getDragAnchor(activeDraggedPiece, event.currentTarget, event.target, point),
     candidate: null
   };
   ghostEl.innerHTML = "";
@@ -459,20 +471,59 @@ function clonePiece(piece) {
   };
 }
 
-function getEventPoint(event, useChangedTouch = false) {
-  if (useChangedTouch && event.changedTouches && event.changedTouches.length) {
-    return event.changedTouches[0];
+function getClientPoint(event) {
+  if (event.changedTouches && event.changedTouches.length > 0) {
+    return {
+      x: event.changedTouches[0].clientX,
+      y: event.changedTouches[0].clientY
+    };
   }
-  if (event.touches && event.touches.length) {
-    return event.touches[0];
+
+  if (event.touches && event.touches.length > 0) {
+    return {
+      x: event.touches[0].clientX,
+      y: event.touches[0].clientY
+    };
   }
-  if (event.changedTouches && event.changedTouches.length) {
-    return event.changedTouches[0];
-  }
+
   if (typeof event.clientX === "number" && typeof event.clientY === "number") {
-    return event;
+    return {
+      x: event.clientX,
+      y: event.clientY
+    };
   }
+
   return null;
+}
+
+function getDragAnchor(piece, pieceEl, eventTarget, point) {
+  const touchedCell = eventTarget.closest ? eventTarget.closest(".piece-cell") : null;
+  if (touchedCell && pieceEl.contains(touchedCell) && !touchedCell.classList.contains("blank")) {
+    return {
+      row: Number(touchedCell.dataset.row),
+      col: Number(touchedCell.dataset.col)
+    };
+  }
+
+  const occupiedCells = [...pieceEl.querySelectorAll(".piece-cell:not(.blank)")];
+  let nearest = { row: piece.cells[0][0], col: piece.cells[0][1] };
+  let nearestDistance = Number.POSITIVE_INFINITY;
+
+  occupiedCells.forEach((cell) => {
+    const rect = cell.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+    const distance = (point.x - centerX) ** 2 + (point.y - centerY) ** 2;
+    if (distance < nearestDistance) {
+      nearestDistance = distance;
+      nearest = {
+        row: Number(cell.dataset.row),
+        col: Number(cell.dataset.col)
+      };
+    }
+  });
+
+  return nearest;
 }
 
 function addDragListeners() {
@@ -482,90 +533,96 @@ function addDragListeners() {
     window.addEventListener("touchcancel", cancelDrag, TOUCH_LISTENER_OPTIONS);
     return;
   }
-  window.addEventListener("pointermove", moveDrag);
-  window.addEventListener("pointerup", endDrag);
-  window.addEventListener("pointercancel", cancelDrag);
+  if (dragState.inputType === "mouse") {
+    window.addEventListener("mousemove", moveDrag);
+    window.addEventListener("mouseup", endDrag);
+    return;
+  }
+  window.addEventListener("pointermove", moveDrag, POINTER_LISTENER_OPTIONS);
+  window.addEventListener("pointerup", endDrag, POINTER_LISTENER_OPTIONS);
+  window.addEventListener("pointercancel", cancelDrag, POINTER_LISTENER_OPTIONS);
 }
 
 function removeDragListeners() {
   window.removeEventListener("touchmove", moveDrag, TOUCH_LISTENER_OPTIONS);
   window.removeEventListener("touchend", endDrag, TOUCH_LISTENER_OPTIONS);
   window.removeEventListener("touchcancel", cancelDrag, TOUCH_LISTENER_OPTIONS);
-  window.removeEventListener("pointermove", moveDrag);
-  window.removeEventListener("pointerup", endDrag);
-  window.removeEventListener("pointercancel", cancelDrag);
+  window.removeEventListener("mousemove", moveDrag);
+  window.removeEventListener("mouseup", endDrag);
+  window.removeEventListener("pointermove", moveDrag, POINTER_LISTENER_OPTIONS);
+  window.removeEventListener("pointerup", endDrag, POINTER_LISTENER_OPTIONS);
+  window.removeEventListener("pointercancel", cancelDrag, POINTER_LISTENER_OPTIONS);
 }
 
-function getCandidateFromPoint(point) {
-  return getBoardCandidate(point.clientX - dragState.offsetX, point.clientY - dragState.offsetY);
+function getBoardDropTarget(point, shouldLog = false) {
+  const rect = boardEl.getBoundingClientRect();
+  const cellSize = rect.width / SIZE;
+  const col = Math.floor((point.x - rect.left) / cellSize);
+  const row = Math.floor((point.y - rect.top) / cellSize);
+  const dragAnchor = dragState.dragAnchor;
+  const targetRow = row - dragAnchor.row;
+  const targetCol = col - dragAnchor.col;
+  const withinBoard = row >= 0 && row < SIZE && col >= 0 && col < SIZE;
+  const valid = withinBoard && isValidPlacement(activeDraggedPiece, targetRow, targetCol);
+
+  if (shouldLog) {
+    console.log("DROP POINT", point);
+    console.log("BOARD RECT", rect);
+    console.log("RAW CELL", row, col);
+    console.log("ANCHOR", dragAnchor);
+    console.log("TARGET", targetRow, targetCol);
+    console.log("VALID", valid);
+  }
+
+  if (!withinBoard) {
+    return null;
+  }
+  return { row: targetRow, col: targetCol, valid };
 }
 
 function moveDrag(event) {
   if (!dragState) {
     return;
   }
-  const point = getEventPoint(event);
+  const point = getClientPoint(event);
   if (!point) {
     return;
   }
   if (event.cancelable) {
     event.preventDefault();
   }
-  const x = point.clientX - dragState.offsetX;
-  const y = point.clientY - dragState.offsetY;
+  const x = point.x - dragState.offsetX;
+  const y = point.y - dragState.offsetY;
   ghostEl.style.transform = `translate(${x}px, ${y}px)`;
 
-  const candidate = getCandidateFromPoint(point);
+  const candidate = getBoardDropTarget(point);
   dragState.candidate = candidate;
-  clearPreviewClasses();
 
   if (!candidate) {
     ghostEl.classList.add("invalid");
+    renderBoard();
     return;
   }
-  const valid = canPlace(state.board, dragState.piece, candidate.row, candidate.col);
-  ghostEl.classList.toggle("invalid", !valid);
-  renderBoard({ piece: dragState.piece, row: candidate.row, col: candidate.col, valid });
-}
-
-function getBoardCandidate(pieceLeft, pieceTop) {
-  const boardRect = boardEl.getBoundingClientRect();
-  const styles = getComputedStyle(document.documentElement);
-  const cellSize = Number.parseFloat(styles.getPropertyValue("--cell-size"));
-  const gap = Number.parseFloat(styles.getPropertyValue("--grid-gap"));
-  const stride = cellSize + gap;
-  const col = Math.round((pieceLeft - boardRect.left - gap) / stride);
-  const row = Math.round((pieceTop - boardRect.top - gap) / stride);
-  if (row < -6 || row > SIZE || col < -6 || col > SIZE) {
-    return null;
-  }
-  return { row, col };
-}
-
-function clearPreviewClasses() {
-  if (!dragState || !dragState.candidate) {
-    renderBoard();
-  }
+  ghostEl.classList.toggle("invalid", !candidate.valid);
+  renderBoard({ piece: dragState.piece, row: candidate.row, col: candidate.col, valid: candidate.valid });
 }
 
 async function endDrag(event) {
   if (!dragState) {
     return;
   }
-  const point = getEventPoint(event, true);
+  const point = getClientPoint(event);
   if (event.cancelable) {
     event.preventDefault();
   }
-  if (point) {
-    dragState.candidate = getCandidateFromPoint(point);
-  }
-  const { candidate, piece, index } = dragState;
-  if (candidate && canPlace(state.board, piece, candidate.row, candidate.col)) {
+  const candidate = point ? getBoardDropTarget(point, true) : null;
+  const { piece, index } = dragState;
+  if (candidate && candidate.valid) {
     placePiece(state.board, piece, candidate.row, candidate.col);
     state.pieces[index] = null;
     const { points, cellsToClear } = getCompletedClearResult(state.board);
     updateScore(points);
-    cleanupDrag(event);
+    cleanupDrag();
     render();
     if (cellsToClear.size) {
       state.isClearing = true;
@@ -573,10 +630,9 @@ async function endDrag(event) {
     }
     finishTurn();
     return;
-  } else {
-    render();
   }
-  cleanupDrag(event);
+  render();
+  cleanupDrag();
 }
 
 function cancelDrag(event) {
@@ -584,7 +640,7 @@ function cancelDrag(event) {
     event.preventDefault();
   }
   render();
-  cleanupDrag(event);
+  cleanupDrag();
 }
 
 function cleanupDrag() {
