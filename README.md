@@ -8,6 +8,14 @@ Open `index.html` in a browser. No build step, network access, ads, or external 
 
 Hosted version: https://brunoebaraujo.github.io/SquareBlast/
 
+## GitHub Pages
+
+This repository includes a `gh-pages` branch with the static game files. In GitHub, enable Pages with:
+
+- Source: Deploy from a branch
+- Branch: `gh-pages`
+- Folder: `/ (root)`
+
 ## Rules
 
 - The board is a 10x10 grid.
