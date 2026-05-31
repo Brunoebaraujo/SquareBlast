@@ -209,14 +209,12 @@ h1 {
   z-index: 20;
   pointer-events: none;
   display: none;
-  gap: 4px;
-  padding: 8px;
   opacity: 0.92;
   transform-origin: top left;
 }
 
 .drag-ghost.visible {
-  display: grid;
+  display: block;
 }
 
 .drag-ghost.invalid {
