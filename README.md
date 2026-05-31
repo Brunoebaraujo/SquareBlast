@@ -19,7 +19,7 @@ This repository includes a `gh-pages` branch with the static game files. In GitH
 ## Rules
 
 - The board is a 10x10 grid.
-- New games start with 20 to 30 filled cells.
+- New games start with 10 to 15 filled cells.
 - Three connected pieces are available at a time.
 - Drag a piece onto the board to place it.
 - Full rows and columns clear after every placement.
