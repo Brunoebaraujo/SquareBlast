@@ -203,14 +203,15 @@ h1 {
 }
 
 .drag-ghost {
+  --tray-cell: var(--cell-size);
   position: fixed;
   left: 0;
   top: 0;
   z-index: 20;
   pointer-events: none;
   display: none;
-  gap: 4px;
-  padding: 8px;
+  gap: var(--grid-gap);
+  padding: var(--grid-gap);
   opacity: 0.92;
   transform-origin: top left;
 }
