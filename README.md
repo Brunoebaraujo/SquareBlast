@@ -6,6 +6,8 @@ SquareBlast is a mobile-friendly offline block puzzle game built with plain HTML
 
 Open `index.html` in a browser. No build step, network access, ads, or external dependencies are required.
 
+Hosted version: https://brunoebaraujo.github.io/SquareBlast/
+
 ## Rules
 
 - The board is a 10x10 grid.
