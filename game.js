@@ -54,6 +54,7 @@ const PIECE_SIZE_WEIGHTS = [
   { size: 4, weight: 40 },
   { size: 5, weight: 20 }
 ];
+const TOUCH_LISTENER_OPTIONS = { passive: false };
 
 const boardEl = document.getElementById("board");
 const trayEl = document.getElementById("tray");
@@ -382,6 +383,7 @@ function renderTray() {
       const pieceEl = buildPieceElement(piece, "piece");
       pieceEl.dataset.index = index;
       pieceEl.addEventListener("pointerdown", startDrag);
+      pieceEl.addEventListener("touchstart", startDrag, TOUCH_LISTENER_OPTIONS);
       slot.appendChild(pieceEl);
     }
     trayEl.appendChild(slot);
@@ -413,19 +415,33 @@ function startDrag(event) {
   if (state.gameOver || state.isClearing) {
     return;
   }
+  const point = getEventPoint(event);
+  if (!point) {
+    return;
+  }
+  if (event.cancelable) {
+    event.preventDefault();
+  }
   const index = Number(event.currentTarget.dataset.index);
   const piece = state.pieces[index];
   if (!piece) {
     return;
   }
-  event.currentTarget.setPointerCapture(event.pointerId);
+  if (event.pointerId !== undefined && event.currentTarget.setPointerCapture) {
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    } catch (error) {
+      // Some iOS WebViews expose Pointer Events without reliable pointer capture.
+    }
+  }
   const rect = event.currentTarget.getBoundingClientRect();
   activeDraggedPiece = clonePiece(piece);
   dragState = {
     index,
     piece: activeDraggedPiece,
-    offsetX: event.clientX - rect.left,
-    offsetY: event.clientY - rect.top,
+    inputType: event.type.startsWith("touch") ? "touch" : "pointer",
+    offsetX: point.clientX - rect.left,
+    offsetY: point.clientY - rect.top,
     pointerId: event.pointerId,
     candidate: null
   };
@@ -433,9 +449,7 @@ function startDrag(event) {
   ghostEl.appendChild(buildPieceElement(activeDraggedPiece, "piece drag-piece"));
   ghostEl.className = "drag-ghost visible";
   moveDrag(event);
-  window.addEventListener("pointermove", moveDrag);
-  window.addEventListener("pointerup", endDrag);
-  window.addEventListener("pointercancel", cancelDrag);
+  addDragListeners();
 }
 
 function clonePiece(piece) {
@@ -445,16 +459,63 @@ function clonePiece(piece) {
   };
 }
 
+function getEventPoint(event, useChangedTouch = false) {
+  if (useChangedTouch && event.changedTouches && event.changedTouches.length) {
+    return event.changedTouches[0];
+  }
+  if (event.touches && event.touches.length) {
+    return event.touches[0];
+  }
+  if (event.changedTouches && event.changedTouches.length) {
+    return event.changedTouches[0];
+  }
+  if (typeof event.clientX === "number" && typeof event.clientY === "number") {
+    return event;
+  }
+  return null;
+}
+
+function addDragListeners() {
+  if (dragState.inputType === "touch") {
+    window.addEventListener("touchmove", moveDrag, TOUCH_LISTENER_OPTIONS);
+    window.addEventListener("touchend", endDrag, TOUCH_LISTENER_OPTIONS);
+    window.addEventListener("touchcancel", cancelDrag, TOUCH_LISTENER_OPTIONS);
+    return;
+  }
+  window.addEventListener("pointermove", moveDrag);
+  window.addEventListener("pointerup", endDrag);
+  window.addEventListener("pointercancel", cancelDrag);
+}
+
+function removeDragListeners() {
+  window.removeEventListener("touchmove", moveDrag, TOUCH_LISTENER_OPTIONS);
+  window.removeEventListener("touchend", endDrag, TOUCH_LISTENER_OPTIONS);
+  window.removeEventListener("touchcancel", cancelDrag, TOUCH_LISTENER_OPTIONS);
+  window.removeEventListener("pointermove", moveDrag);
+  window.removeEventListener("pointerup", endDrag);
+  window.removeEventListener("pointercancel", cancelDrag);
+}
+
+function getCandidateFromPoint(point) {
+  return getBoardCandidate(point.clientX - dragState.offsetX, point.clientY - dragState.offsetY);
+}
+
 function moveDrag(event) {
   if (!dragState) {
     return;
   }
-  event.preventDefault();
-  const x = event.clientX - dragState.offsetX;
-  const y = event.clientY - dragState.offsetY;
+  const point = getEventPoint(event);
+  if (!point) {
+    return;
+  }
+  if (event.cancelable) {
+    event.preventDefault();
+  }
+  const x = point.clientX - dragState.offsetX;
+  const y = point.clientY - dragState.offsetY;
   ghostEl.style.transform = `translate(${x}px, ${y}px)`;
 
-  const candidate = getBoardCandidate(event.clientX - dragState.offsetX, event.clientY - dragState.offsetY);
+  const candidate = getCandidateFromPoint(point);
   dragState.candidate = candidate;
   clearPreviewClasses();
 
@@ -491,6 +552,13 @@ async function endDrag(event) {
   if (!dragState) {
     return;
   }
+  const point = getEventPoint(event, true);
+  if (event.cancelable) {
+    event.preventDefault();
+  }
+  if (point) {
+    dragState.candidate = getCandidateFromPoint(point);
+  }
   const { candidate, piece, index } = dragState;
   if (candidate && canPlace(state.board, piece, candidate.row, candidate.col)) {
     placePiece(state.board, piece, candidate.row, candidate.col);
@@ -512,6 +580,9 @@ async function endDrag(event) {
 }
 
 function cancelDrag(event) {
+  if (event.cancelable) {
+    event.preventDefault();
+  }
   render();
   cleanupDrag(event);
 }
@@ -521,9 +592,7 @@ function cleanupDrag() {
   activeDraggedPiece = null;
   ghostEl.className = "drag-ghost";
   ghostEl.innerHTML = "";
-  window.removeEventListener("pointermove", moveDrag);
-  window.removeEventListener("pointerup", endDrag);
-  window.removeEventListener("pointercancel", cancelDrag);
+  removeDragListeners();
 }
 
 function animateAndClearCells(cellsToClear) {
