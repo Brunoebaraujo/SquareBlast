@@ -56,6 +56,7 @@ const ghostEl = document.getElementById("drag-ghost");
 
 let state;
 let dragState = null;
+let activeDraggedPiece = null;
 
 function emptyBoard() {
   return Array.from({ length: SIZE }, () => Array(SIZE).fill(null));
@@ -362,7 +363,7 @@ function buildPieceElement(piece, className) {
   for (let row = 0; row < piece.rows; row += 1) {
     for (let col = 0; col < piece.cols; col += 1) {
       const cell = document.createElement("div");
-      cell.className = className === "piece" ? "piece-cell" : "ghost-cell";
+      cell.className = className.includes("piece") ? "piece-cell" : "ghost-cell";
       if (occupied.has(`${row}-${col}`)) {
         cell.style.backgroundColor = piece.color;
       } else {
@@ -385,16 +386,17 @@ function startDrag(event) {
   }
   event.currentTarget.setPointerCapture(event.pointerId);
   const rect = event.currentTarget.getBoundingClientRect();
+  activeDraggedPiece = clonePiece(piece);
   dragState = {
     index,
-    piece: clonePiece(piece),
+    piece: activeDraggedPiece,
     offsetX: event.clientX - rect.left,
     offsetY: event.clientY - rect.top,
     pointerId: event.pointerId,
     candidate: null
   };
   ghostEl.innerHTML = "";
-  ghostEl.appendChild(buildPieceElement(dragState.piece, "ghost"));
+  ghostEl.appendChild(buildPieceElement(activeDraggedPiece, "piece drag-piece"));
   ghostEl.className = "drag-ghost visible";
   moveDrag(event);
   window.addEventListener("pointermove", moveDrag);
@@ -477,6 +479,7 @@ function cancelDrag(event) {
 
 function cleanupDrag() {
   dragState = null;
+  activeDraggedPiece = null;
   ghostEl.className = "drag-ghost";
   ghostEl.innerHTML = "";
   window.removeEventListener("pointermove", moveDrag);
