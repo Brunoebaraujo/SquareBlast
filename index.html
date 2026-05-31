@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>SquareBlast</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <main class="app" aria-labelledby="game-title">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Offline puzzle</p>
+          <h1 id="game-title">SquareBlast</h1>
+        </div>
+        <div class="scoreboard" aria-label="Scores">
+          <div class="score-pill">
+            <span>Score</span>
+            <strong id="score">0</strong>
+          </div>
+          <div class="score-pill">
+            <span>Best</span>
+            <strong id="best-score">0</strong>
+          </div>
+        </div>
+      </header>
+
+      <section class="game-panel" aria-label="SquareBlast game board">
+        <div id="board" class="board" role="grid" aria-label="10 by 10 puzzle board"></div>
+        <div id="tray" class="tray" aria-label="Available pieces"></div>
+      </section>
+
+      <div class="actions">
+        <button id="new-game" type="button">New Game</button>
+        <button id="restart" type="button">Restart</button>
+      </div>
+    </main>
+
+    <div id="drag-ghost" class="drag-ghost" aria-hidden="true"></div>
+
+    <div id="game-over-modal" class="modal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="game-over-title">
+      <div class="modal-card">
+        <h2 id="game-over-title">Game Over</h2>
+        <p>Final score: <strong id="final-score">0</strong></p>
+        <p>Best score: <strong id="modal-best-score">0</strong></p>
+        <button id="modal-restart" type="button">Restart</button>
+      </div>
+    </div>
+
+    <script src="game.js"></script>
+  </body>
+</html>
