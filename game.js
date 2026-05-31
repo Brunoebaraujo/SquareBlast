@@ -1,8 +1,8 @@
 "use strict";
 
 const SIZE = 10;
-const MIN_INITIAL_FILL = 20;
-const MAX_INITIAL_FILL = 30;
+const MIN_INITIAL_FILL = 10;
+const MAX_INITIAL_FILL = 15;
 const BEST_SCORE_KEY = "squareblast.bestScore";
 const SCORE_TABLE = {
   1: 100,
@@ -31,6 +31,9 @@ const COLORS = [
 ];
 
 const SHAPES = [
+  [[0, 0], [0, 1], [0, 2]],
+  [[0, 0], [1, 0], [1, 1]],
+  [[0, 1], [1, 0], [1, 1]],
   [[0, 0], [0, 1], [0, 2], [0, 3]],
   [[0, 0], [0, 1], [0, 2], [0, 3], [0, 4]],
   [[0, 0], [1, 0], [2, 0], [2, 1]],
@@ -43,6 +46,12 @@ const SHAPES = [
   [[0, 0], [1, 0], [1, 1], [2, 1], [2, 2]],
   [[0, 0], [1, 0], [1, 1], [1, 2], [2, 2]],
   [[0, 1], [1, 0], [1, 1], [2, 1], [2, 2]]
+];
+
+const PIECE_SIZE_WEIGHTS = [
+  { size: 3, weight: 40 },
+  { size: 4, weight: 40 },
+  { size: 5, weight: 20 }
 ];
 
 const boardEl = document.getElementById("board");
@@ -116,7 +125,7 @@ function getBounds(cells) {
 }
 
 function isOrthogonallyConnected(cells) {
-  if (cells.length < 4 || cells.length > 5) {
+  if (cells.length < 3 || cells.length > 5) {
     return false;
   }
 
@@ -139,11 +148,25 @@ function isOrthogonallyConnected(cells) {
   return seen.size === cells.length;
 }
 
+function pickPieceSize() {
+  const totalWeight = PIECE_SIZE_WEIGHTS.reduce((sum, item) => sum + item.weight, 0);
+  let roll = randomInt(1, totalWeight);
+  for (const item of PIECE_SIZE_WEIGHTS) {
+    roll -= item.weight;
+    if (roll <= 0) {
+      return item.size;
+    }
+  }
+  return PIECE_SIZE_WEIGHTS[0].size;
+}
+
 function generatePieces() {
   const colors = shuffle(COLORS);
   const validShapes = SHAPES.filter(isOrthogonallyConnected);
   return Array.from({ length: 3 }, (_, index) => {
-    const cells = transformShape(validShapes[randomInt(0, validShapes.length - 1)]);
+    const size = pickPieceSize();
+    const sizeShapes = validShapes.filter((shape) => shape.length === size);
+    const cells = transformShape(sizeShapes[randomInt(0, sizeShapes.length - 1)]);
     return {
       id: globalThis.crypto && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`,
       cells,
