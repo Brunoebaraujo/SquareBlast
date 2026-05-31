@@ -3,6 +3,7 @@
 const SIZE = 10;
 const MIN_INITIAL_FILL = 10;
 const MAX_INITIAL_FILL = 15;
+const CLEAR_ANIMATION_MS = 220;
 const BEST_SCORE_KEY = "squareblast.bestScore";
 const SCORE_TABLE = {
   1: 100,
@@ -261,11 +262,11 @@ function findCompletedLines(board) {
   return { rows, cols };
 }
 
-function clearCompletedLines(board) {
+function getCompletedClearResult(board) {
   const { rows, cols } = findCompletedLines(board);
   const cleared = rows.length + cols.length;
   if (!cleared) {
-    return 0;
+    return { points: 0, cellsToClear: new Set() };
   }
   const cellsToClear = new Set();
   rows.forEach((row) => {
@@ -278,12 +279,14 @@ function clearCompletedLines(board) {
       cellsToClear.add(`${row}-${col}`);
     }
   });
+  return { points: SCORE_TABLE[cleared] || 0, cellsToClear };
+}
+
+function clearCellsFromBoard(cellsToClear) {
   cellsToClear.forEach((key) => {
     const [row, col] = key.split("-").map(Number);
-    board[row][col] = null;
+    state.board[row][col] = null;
   });
-  animateClearedCells(cellsToClear);
-  return SCORE_TABLE[cleared] || 0;
 }
 
 function updateScore(points) {
@@ -301,7 +304,8 @@ function newGame() {
     pieces,
     score: 0,
     bestScore: getBestScore(),
-    gameOver: false
+    gameOver: false,
+    isClearing: false
   };
   closeModal();
   render();
@@ -323,6 +327,13 @@ function checkGameOver() {
     state.gameOver = true;
     openModal();
   }
+}
+
+function finishTurn() {
+  refillPiecesIfNeeded();
+  render();
+  state.isClearing = false;
+  checkGameOver();
 }
 
 function render() {
@@ -399,7 +410,7 @@ function buildPieceElement(piece, className) {
 }
 
 function startDrag(event) {
-  if (state.gameOver) {
+  if (state.gameOver || state.isClearing) {
     return;
   }
   const index = Number(event.currentTarget.dataset.index);
@@ -476,7 +487,7 @@ function clearPreviewClasses() {
   }
 }
 
-function endDrag(event) {
+async function endDrag(event) {
   if (!dragState) {
     return;
   }
@@ -484,11 +495,16 @@ function endDrag(event) {
   if (candidate && canPlace(state.board, piece, candidate.row, candidate.col)) {
     placePiece(state.board, piece, candidate.row, candidate.col);
     state.pieces[index] = null;
-    const points = clearCompletedLines(state.board);
+    const { points, cellsToClear } = getCompletedClearResult(state.board);
     updateScore(points);
-    refillPiecesIfNeeded();
+    cleanupDrag(event);
     render();
-    checkGameOver();
+    if (cellsToClear.size) {
+      state.isClearing = true;
+      await animateAndClearCells(cellsToClear);
+    }
+    finishTurn();
+    return;
   } else {
     render();
   }
@@ -510,7 +526,8 @@ function cleanupDrag() {
   window.removeEventListener("pointercancel", cancelDrag);
 }
 
-function animateClearedCells(cellsToClear) {
+function animateAndClearCells(cellsToClear) {
+  state.isClearing = true;
   requestAnimationFrame(() => {
     [...boardEl.children].forEach((cell, index) => {
       const row = Math.floor(index / SIZE);
@@ -519,6 +536,14 @@ function animateClearedCells(cellsToClear) {
         cell.classList.add("clearing");
       }
     });
+  });
+
+  return new Promise((resolve) => {
+    window.setTimeout(() => {
+      clearCellsFromBoard(cellsToClear);
+      renderBoard();
+      resolve();
+    }, CLEAR_ANIMATION_MS);
   });
 }
 
